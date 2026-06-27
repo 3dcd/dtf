@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Plancha DTF medidas por logo — 3DCD</title>
+<title>Plancha e impresión — 3DCD</title>
 <style>
   *{box-sizing:border-box}
 
@@ -98,6 +98,78 @@
 
   button:hover{border-color:#111}
   button.primary{background:#111;color:white;border-color:#111}
+
+  .icon-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-weight:500;
+  }
+
+  .icon{
+    width:15px;
+    height:15px;
+    display:inline-block;
+    vertical-align:-2px;
+    stroke:currentColor;
+    stroke-width:2;
+    fill:none;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+
+  .orientation-tabs{
+    display:flex;
+    gap:4px;
+    background:rgba(255,255,255,.46);
+    border:1px solid rgba(0,0,0,.08);
+    padding:4px;
+    border-radius:999px;
+  }
+
+  .orientation-tabs button{
+    border:0;
+    background:transparent;
+    padding:8px 10px;
+    color:#555;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .orientation-tabs button.active{
+    background:#111;
+    color:#fff;
+  }
+
+  .export-wrap{position:relative}
+
+  .export-menu{
+    position:absolute;
+    right:0;
+    top:calc(100% + 8px);
+    min-width:190px;
+    background:rgba(255,255,255,.96);
+    border:1px solid rgba(0,0,0,.12);
+    border-radius:16px;
+    box-shadow:0 18px 50px rgba(0,0,0,.18);
+    padding:6px;
+    z-index:20;
+    display:none;
+  }
+
+  .export-menu.open{display:block}
+
+  .export-menu button{
+    width:100%;
+    border:0;
+    border-radius:11px;
+    background:transparent;
+    justify-content:flex-start;
+    padding:10px 11px;
+  }
+
+  .export-menu button:hover{background:#f1f1f1}
 
   .format-tabs{
     display:flex;
@@ -288,6 +360,70 @@
 
   #fileInput{display:none}
 
+  @page{
+    margin:0;
+  }
+
+  @media print{
+    *{
+      box-shadow:none !important;
+      text-shadow:none !important;
+    }
+    html,body{
+      margin:0 !important;
+      padding:0 !important;
+      width:var(--print-w-mm, 210mm);
+      height:var(--print-h-mm, 297mm);
+      overflow:hidden !important;
+      background:white !important;
+    }
+    body *{
+      visibility:hidden !important;
+    }
+    .app,.workspace,.viewport,.sheet-wrap,.sheet-wrap canvas{
+      visibility:visible !important;
+    }
+    .app{
+      display:block !important;
+      position:fixed !important;
+      inset:0 auto auto 0 !important;
+      width:var(--print-w-mm, 210mm) !important;
+      height:var(--print-h-mm, 297mm) !important;
+      min-height:0 !important;
+      padding:0 !important;
+      margin:0 !important;
+      overflow:hidden !important;
+      background:white !important;
+    }
+    .topbar,.bottom,.hint{
+      display:none !important;
+      visibility:hidden !important;
+    }
+    .workspace,.viewport,.sheet-wrap{
+      position:absolute !important;
+      inset:0 auto auto 0 !important;
+      display:block !important;
+      width:var(--print-w-mm, 210mm) !important;
+      height:var(--print-h-mm, 297mm) !important;
+      padding:0 !important;
+      margin:0 !important;
+      border:0 !important;
+      border-radius:0 !important;
+      overflow:hidden !important;
+      background:transparent !important;
+      transform:none !important;
+    }
+    canvas{
+      display:block !important;
+      width:var(--print-w-mm, 210mm) !important;
+      height:var(--print-h-mm, 297mm) !important;
+      margin:0 !important;
+      padding:0 !important;
+      background:transparent !important;
+      image-rendering:auto;
+    }
+  }
+
   @media (max-width:720px){
     .app{padding:8px;gap:8px}
     .topbar{
@@ -298,7 +434,8 @@
       width:100%;
       justify-content:flex-start;
     }
-    .format-tabs{
+    .format-tabs,
+    .orientation-tabs{
       order:1;
       width:100%;
       overflow:auto;
@@ -350,7 +487,7 @@
 <main class="app">
   <div class="topbar">
     <div class="brand">
-      <span>3DCD · Plancha DTF</span>
+      <span>3DCD · Plancha e impresión</span>
       <span class="mode-tabs" id="modeTabs">
         <button data-mode="textil" class="active">Textil</button>
         <button data-mode="uv">UV</button>
@@ -363,11 +500,30 @@
         <button data-format="60x100">60×100</button>
         <button data-format="60x150">60×150</button>
       </div>
+      <div class="orientation-tabs" id="orientationTabs" aria-label="Orientación de hoja">
+        <button data-orientation="vertical" class="active" title="Hoja vertical">↕ Vertical</button>
+        <button data-orientation="horizontal" title="Hoja horizontal">↔ Horizontal</button>
+      </div>
       <label class="pill">Sep. <input id="gap" type="number" value="4" min="0" max="30"> mm</label>
       <label class="pill">Zoom <input id="zoomInput" type="number" value="100" min="20" max="500"> %</label>
-      <button id="cleanBtn">Limpiar</button>
-      <button id="exportSvgBtn">SVG editable</button>
-      <button class="primary" id="exportPngBtn">PNG transparente 300dpi</button>
+      <button id="cleanBtn" class="icon-btn" title="Limpiar plancha">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 15h10l1-15"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        Limpiar
+      </button>
+      <div class="export-wrap">
+        <button id="exportMenuBtn" class="icon-btn primary" title="Exportar archivo">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+          Exportar
+        </button>
+        <div class="export-menu" id="exportMenu">
+          <button id="exportPngBtn" class="icon-btn">PNG transparente 300 dpi</button>
+          <button id="exportSvgBtn" class="icon-btn">SVG editable / proyecto</button>
+        </div>
+      </div>
+      <button id="printBtn" class="icon-btn" title="Imprimir o guardar como PDF">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/><path d="M18 12h.01"/></svg>
+        Imprimir
+      </button>
     </div>
   </div>
 
@@ -376,8 +532,8 @@
       <div id="dropZone" class="sheet-wrap">
         <canvas id="sheet"></canvas>
         <div class="hint">
-          <strong>Arrastrá logos aquí</strong>
-          <span>Soltá uno o varios SVG/PNG/JPG. Si soltás un SVG guardado por esta herramienta, recupera la plancha completa.</span>
+          <strong>Arrastrá imágenes aquí</strong>
+          <span>Soltá SVG, PNG o JPG. Prepará planchas para DTF o armá una hoja rápida para imprimir en tu impresora. Si soltás un SVG guardado por esta herramienta, recupera la plancha completa.</span>
         </div>
       </div>
     </div>
@@ -387,7 +543,7 @@
     <div class="logo-list" id="logoList"></div>
     <div class="info">
       <span id="status">Sin logos cargados.</span>
-      <span>Lado largo por logo: 80 mm inicial · ajustable de 10 en 10 mm</span>
+      <span>Imprimir abre la ventana del sistema: podés elegir impresora o guardar como PDF.</span>
     </div>
   </section>
 
@@ -422,9 +578,13 @@
   const statusEl = document.getElementById("status");
   const logoList = document.getElementById("logoList");
   const formatTabs = document.getElementById("formatTabs");
+  const orientationTabs = document.getElementById("orientationTabs");
   const modeTabs = document.getElementById("modeTabs");
+  const exportMenuBtn = document.getElementById("exportMenuBtn");
+  const exportMenu = document.getElementById("exportMenu");
 
   let dtfMode = "textil";
+  let orientation = "vertical";
 
   let logos = [];
   let lastLayout = null;
@@ -456,7 +616,15 @@
   }
 
   function currentFormat(){
-    return FORMATS[formatKey] || FORMATS.A4;
+    const base = FORMATS[formatKey] || FORMATS.A4;
+    if(orientation === "horizontal"){
+      return {label:base.label, w:base.h, h:base.w};
+    }
+    return {...base};
+  }
+
+  function orientationLabel(){
+    return orientation === "horizontal" ? "horizontal" : "vertical";
   }
 
   function currentModeLabel(){
@@ -509,8 +677,15 @@
     });
   }
 
+  function updatePrintPageSize(){
+    const fmt = currentFormat();
+    document.documentElement.style.setProperty("--print-w-mm", fmt.w + "mm");
+    document.documentElement.style.setProperty("--print-h-mm", fmt.h + "mm");
+  }
+
   function applySheetSize(autoFit=false){
     const fmt = currentFormat();
+    updatePrintPageSize();
 
     pagePxW = mm(fmt.w);
     pagePxH = mm(fmt.h);
@@ -668,7 +843,7 @@
 
     const fmt = currentFormat();
     statusEl.textContent =
-      `${currentModeLabel()} · ${fmt.label} · ${fmt.w}×${fmt.h} mm · ${lastLayout.totalSlots} logos · ${logos.length} archivo/s · separación ${gapInput.value} mm`;
+      `${currentModeLabel()} · ${fmt.label} ${orientationLabel()} · ${fmt.w}×${fmt.h} mm · ${lastLayout.totalSlots} logos · ${logos.length} archivo/s · separación ${gapInput.value} mm`;
 
     renderLogoList(lastLayout.counts);
   }
@@ -790,6 +965,10 @@
     if(meta.formatKey && FORMATS[meta.formatKey]){
       formatKey = meta.formatKey;
       setActiveFormatButton();
+    }
+    if(meta.orientation){
+      orientation = meta.orientation === "horizontal" ? "horizontal" : "vertical";
+      setActiveOrientationButton();
     }
     if(meta.dtfMode) {
       dtfMode = meta.dtfMode;
@@ -950,6 +1129,93 @@
     a.click();
   }
 
+
+  function printSheet(){
+    if(!logos.length){
+      alert("Primero arrastrá una imagen. Después podés imprimir o guardar como PDF.");
+      return;
+    }
+    if(!lastLayout) lastLayout = computeLayout();
+
+    const fmt = currentFormat();
+
+    // Para imprimir no mandamos el HTML visible.
+    // Generamos una imagen limpia de la plancha y abrimos una ventana mínima de impresión.
+    let imgData;
+    try{
+      const out = document.createElement("canvas");
+      out.width = pagePxW;
+      out.height = pagePxH;
+      renderToCanvas(out, 1);
+      imgData = out.toDataURL("image/png");
+    }catch(err){
+      alert("No pude preparar la hoja completa para imprimir desde este dispositivo. Probá exportar PNG/SVG.");
+      return;
+    }
+
+    const w = window.open("", "_blank");
+    if(!w){
+      alert("El navegador bloqueó la ventana de impresión. Permití ventanas emergentes para este archivo.");
+      return;
+    }
+
+    const title = `${currentModeLabel()} ${fmt.label}`;
+    const htmlPrint = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  @page{
+    size:${fmt.w}mm ${fmt.h}mm;
+    margin:0;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0 !important;
+    padding:0 !important;
+    width:${fmt.w}mm;
+    height:${fmt.h}mm;
+    overflow:hidden !important;
+    background:white;
+  }
+  body{
+    display:block;
+  }
+  img{
+    display:block;
+    width:${fmt.w}mm;
+    height:${fmt.h}mm;
+    margin:0;
+    padding:0;
+    object-fit:contain;
+    page-break-after:avoid;
+    page-break-before:avoid;
+    page-break-inside:avoid;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+</style>
+</head>
+<body>
+<img src="${imgData}" alt="">
+<script>
+  window.onload = () => {
+    setTimeout(() => {
+      window.focus();
+      window.print();
+    }, 250);
+  };
+<\/script>
+</body>
+</html>`;
+
+    w.document.open();
+    w.document.write(htmlPrint);
+    w.document.close();
+  }
+
+
   function exportSVG(){
     if(!logos.length){
       alert("Primero arrastrá uno o varios logos.");
@@ -962,6 +1228,7 @@
       app: "3DCD Plancha DTF",
       created: new Date().toISOString(),
       formatKey,
+      orientation,
       dtfMode,
       dtfModeLabel: currentModeLabel(),
       page: {format:fmt.label, width_mm:fmt.w, height_mm:fmt.h, dpi:DPI},
@@ -1065,6 +1332,12 @@ ${content}</svg>`;
     });
   }
 
+  function setActiveOrientationButton(){
+    orientationTabs.querySelectorAll("button").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.orientation === orientation);
+    });
+  }
+
   dropZone.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", e => handleFiles(e.target.files));
 
@@ -1096,6 +1369,14 @@ ${content}</svg>`;
     if(!btn) return;
     formatKey = btn.dataset.format;
     setActiveFormatButton();
+    applySheetSize(true);
+  });
+
+  orientationTabs.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-orientation]");
+    if(!btn) return;
+    orientation = btn.dataset.orientation === "horizontal" ? "horizontal" : "vertical";
+    setActiveOrientationButton();
     applySheetSize(true);
   });
 
@@ -1168,12 +1449,31 @@ ${content}</svg>`;
     draw();
   });
 
-  document.getElementById("exportPngBtn").addEventListener("click", exportPNG);
-  document.getElementById("exportSvgBtn").addEventListener("click", exportSVG);
+  exportMenuBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    exportMenu.classList.toggle("open");
+  });
+
+  document.addEventListener("click", e => {
+    if(!exportMenu.contains(e.target) && e.target !== exportMenuBtn){
+      exportMenu.classList.remove("open");
+    }
+  });
+
+  document.getElementById("exportPngBtn").addEventListener("click", () => {
+    exportMenu.classList.remove("open");
+    exportPNG();
+  });
+  document.getElementById("exportSvgBtn").addEventListener("click", () => {
+    exportMenu.classList.remove("open");
+    exportSVG();
+  });
+  document.getElementById("printBtn").addEventListener("click", printSheet);
 
   window.addEventListener("resize", () => applySheetSize(false));
 
   setActiveModeButton();
+  setActiveOrientationButton();
   applySheetSize(true);
 })();
 </script>
