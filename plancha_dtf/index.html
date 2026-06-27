@@ -12,6 +12,7 @@
     width:100%;
     height:100%;
     overflow:hidden;
+    overscroll-behavior:none;
   }
 
   body{
@@ -23,10 +24,12 @@
   .app{
     width:100vw;
     height:100vh;
+    height:100dvh;
+    min-height:100svh;
     display:grid;
-    grid-template-rows:auto 1fr auto;
+    grid-template-rows:auto minmax(0,1fr) auto;
     gap:10px;
-    padding:12px;
+    padding:12px 12px calc(12px + env(safe-area-inset-bottom));
   }
 
   .topbar{
@@ -153,20 +156,22 @@
     width:100%;
     height:100%;
     overflow:auto;
+    overscroll-behavior:contain;
     touch-action:none;
     padding:16px;
     display:flex;
-    justify-content:center;
+    justify-content:flex-start;
     align-items:flex-start;
   }
 
   .sheet-wrap{
     position:relative;
     flex:0 0 auto;
+    margin:0 auto;
     border-radius:4px;
     overflow:hidden;
     box-shadow:0 18px 60px rgba(0,0,0,.20);
-    transform-origin:center top;
+    transform-origin:left top;
     background:
       linear-gradient(45deg,#f4f4f4 25%,transparent 25%),
       linear-gradient(-45deg,#f4f4f4 25%,transparent 25%),
@@ -208,6 +213,7 @@
     flex-direction:column;
     gap:8px;
     min-height:70px;
+    overflow:hidden;
   }
 
   .logo-list{
@@ -215,8 +221,10 @@
     gap:6px;
     flex-wrap:wrap;
     justify-content:center;
-    max-height:76px;
+    max-height:96px;
     overflow:auto;
+    -webkit-overflow-scrolling:touch;
+    padding-bottom:2px;
   }
 
   .chip{
@@ -311,6 +319,25 @@
     }
     .viewport{padding:10px}
   }
+
+  @media (pointer:coarse){
+    .bottom{min-height:88px}
+    .logo-list{
+      justify-content:flex-start;
+      flex-wrap:nowrap;
+      max-height:48px;
+      overflow-x:auto;
+      overflow-y:hidden;
+    }
+    .chip{flex:0 0 auto}
+  }
+
+  @media (min-width:721px) and (pointer:coarse){
+    .app{gap:8px}
+    .bottom{min-height:92px}
+    .logo-list{max-height:52px}
+  }
+
 </style>
 </head>
 <body>
@@ -395,6 +422,8 @@
   let lastLayout = null;
   let formatKey = "A4";
   let zoom = 1;
+  let baseSheetW = 0;
+  let baseSheetH = 0;
 
   function mm(v){ return Math.round(v * PX_PER_MM); }
 
@@ -448,24 +477,36 @@
     return Math.max(120, Math.min(fitByWidth, fitByHeight));
   }
 
+  function updateSheetCssSize(){
+    dropZone.style.width = (baseSheetW * zoom) + "px";
+    dropZone.style.height = (baseSheetH * zoom) + "px";
+  }
+
+  function centerSheet(){
+    requestAnimationFrame(() => {
+      const extraX = Math.max(0, (dropZone.offsetWidth - viewport.clientWidth) / 2);
+      viewport.scrollLeft = extraX;
+      viewport.scrollTop = 0;
+    });
+  }
+
   function applySheetSize(autoFit=false){
     const fmt = currentFormat();
 
     canvas.width = mm(fmt.w);
     canvas.height = mm(fmt.h);
 
-    const cssW = fitWidthForScreen(fmt);
-    const cssH = cssW * (fmt.h / fmt.w);
-    dropZone.style.width = cssW + "px";
-    dropZone.style.height = cssH + "px";
+    baseSheetW = fitWidthForScreen(fmt);
+    baseSheetH = baseSheetW * (fmt.h / fmt.w);
 
     if(autoFit){
       zoom = 1;
       zoomInput.value = 100;
     }
 
-    dropZone.style.transform = `scale(${zoom})`;
+    updateSheetCssSize();
     draw();
+    if(autoFit) centerSheet();
   }
 
   function targetSizeForLogo(logo){
@@ -941,10 +982,32 @@ ${content}</svg>`;
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function setZoom(value){
-    zoom = Math.min(5, Math.max(.2, value));
+  function setZoom(value, focalClientX=null, focalClientY=null){
+    const oldZoom = zoom;
+    const nextZoom = Math.min(5, Math.max(.2, value));
+    if(Math.abs(nextZoom - oldZoom) < 0.0001) return;
+
+    let contentX = null;
+    let contentY = null;
+    let focalX = 0;
+    let focalY = 0;
+
+    if(focalClientX !== null && focalClientY !== null){
+      const vp = viewport.getBoundingClientRect();
+      focalX = focalClientX - vp.left;
+      focalY = focalClientY - vp.top;
+      contentX = (viewport.scrollLeft + focalX) / oldZoom;
+      contentY = (viewport.scrollTop + focalY) / oldZoom;
+    }
+
+    zoom = nextZoom;
     zoomInput.value = Math.round(zoom * 100);
-    dropZone.style.transform = `scale(${zoom})`;
+    updateSheetCssSize();
+
+    if(contentX !== null){
+      viewport.scrollLeft = contentX * zoom - focalX;
+      viewport.scrollTop = contentY * zoom - focalY;
+    }
   }
 
   function setActiveFormatButton(){
@@ -993,33 +1056,60 @@ ${content}</svg>`;
     if(!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.08 : 0.08;
-    setZoom(zoom + delta);
+    setZoom(zoom + delta, e.clientX, e.clientY);
   }, {passive:false});
+
+  function gestureInfo(points){
+    const pts = Array.from(points.values());
+    if(pts.length < 2) return null;
+    const cx = (pts[0].x + pts[1].x) / 2;
+    const cy = (pts[0].y + pts[1].y) / 2;
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    return {cx, cy, dist};
+  }
 
   let pinch = null;
   viewport.addEventListener("pointerdown", e => {
+    if(e.pointerType === "mouse") return;
     viewport.setPointerCapture(e.pointerId);
-    if(!pinch) pinch = {points:new Map(), startDist:0, startZoom:zoom};
+    if(!pinch) pinch = {points:new Map(), startDist:0, startZoom:zoom, lastCenter:null};
     pinch.points.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pinch.points.size === 2){
-      const pts = Array.from(pinch.points.values());
-      pinch.startDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      const info = gestureInfo(pinch.points);
+      pinch.startDist = info.dist;
       pinch.startZoom = zoom;
+      pinch.lastCenter = {x:info.cx, y:info.cy};
     }
   });
 
   viewport.addEventListener("pointermove", e => {
     if(!pinch || !pinch.points.has(e.pointerId)) return;
+    e.preventDefault();
     pinch.points.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if(pinch.points.size === 2){
-      const pts = Array.from(pinch.points.values());
-      const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
-      if(pinch.startDist > 0) setZoom(pinch.startZoom * (d / pinch.startDist));
-    }
-  });
 
-  ["pointerup","pointercancel"].forEach(ev => viewport.addEventListener(ev, e => {
+    if(pinch.points.size === 2){
+      const info = gestureInfo(pinch.points);
+      if(!info || pinch.startDist <= 0) return;
+
+      const nextZoom = pinch.startZoom * (info.dist / pinch.startDist);
+      setZoom(nextZoom, info.cx, info.cy);
+
+      if(pinch.lastCenter){
+        viewport.scrollLeft -= (info.cx - pinch.lastCenter.x);
+        viewport.scrollTop -= (info.cy - pinch.lastCenter.y);
+      }
+      pinch.lastCenter = {x:info.cx, y:info.cy};
+    }
+  }, {passive:false});
+
+  ["pointerup","pointercancel","pointerleave"].forEach(ev => viewport.addEventListener(ev, e => {
     if(pinch && pinch.points) pinch.points.delete(e.pointerId);
+    if(pinch && pinch.points.size >= 2){
+      const info = gestureInfo(pinch.points);
+      pinch.startDist = info.dist;
+      pinch.startZoom = zoom;
+      pinch.lastCenter = {x:info.cx, y:info.cy};
+    }
     if(pinch && pinch.points.size === 0) pinch = null;
   }));
 
