@@ -323,11 +323,17 @@
   @media (pointer:coarse){
     .bottom{min-height:88px}
     .logo-list{
-      justify-content:flex-start;
+      justify-content:center;
       flex-wrap:nowrap;
       max-height:48px;
       overflow-x:auto;
       overflow-y:hidden;
+      scroll-padding-inline:50%;
+      padding-left:8px;
+      padding-right:8px;
+    }
+    .logo-list.many-chips{
+      justify-content:flex-start;
     }
     .chip{flex:0 0 auto}
   }
@@ -403,6 +409,8 @@
   const PRINT_MARGIN_X_MM = 10;
   const PRINT_MARGIN_Y_MM = 5;
   const LOGO_LONG_SIDE_MM = 80;
+  const PREVIEW_MAX_SIDE = 8192;
+  const PREVIEW_MAX_PIXELS = 32000000;
 
   const canvas = document.getElementById("sheet");
   const ctx = canvas.getContext("2d");
@@ -424,6 +432,9 @@
   let zoom = 1;
   let baseSheetW = 0;
   let baseSheetH = 0;
+  let pagePxW = 0;
+  let pagePxH = 0;
+  let previewScale = 1;
 
   function mm(v){ return Math.round(v * PX_PER_MM); }
 
@@ -477,6 +488,14 @@
     return Math.max(120, Math.min(fitByWidth, fitByHeight));
   }
 
+  function computePreviewScale(w, h){
+    // En iPad/Safari los canvas enormes pueden quedar en blanco.
+    // La vista previa se dibuja más liviana, pero las medidas/exportación SVG conservan la escala real.
+    const bySide = Math.min(1, PREVIEW_MAX_SIDE / Math.max(w, h));
+    const byArea = Math.min(1, Math.sqrt(PREVIEW_MAX_PIXELS / Math.max(1, w * h)));
+    return Math.max(0.08, Math.min(bySide, byArea));
+  }
+
   function updateSheetCssSize(){
     dropZone.style.width = (baseSheetW * zoom) + "px";
     dropZone.style.height = (baseSheetH * zoom) + "px";
@@ -493,8 +512,11 @@
   function applySheetSize(autoFit=false){
     const fmt = currentFormat();
 
-    canvas.width = mm(fmt.w);
-    canvas.height = mm(fmt.h);
+    pagePxW = mm(fmt.w);
+    pagePxH = mm(fmt.h);
+    previewScale = computePreviewScale(pagePxW, pagePxH);
+    canvas.width = Math.max(1, Math.round(pagePxW * previewScale));
+    canvas.height = Math.max(1, Math.round(pagePxH * previewScale));
 
     baseSheetW = fitWidthForScreen(fmt);
     baseSheetH = baseSheetW * (fmt.h / fmt.w);
@@ -532,8 +554,8 @@
 
     const usableX = marginX;
     const usableY = marginY;
-    const usableW = canvas.width - marginX * 2;
-    const usableH = canvas.height - marginY * 2;
+    const usableW = pagePxW - marginX * 2;
+    const usableH = pagePxH - marginY * 2;
 
     const sizes = logos.map(targetSizeForLogo);
 
@@ -624,7 +646,9 @@
   }
 
   function draw(){
+    ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.setTransform(previewScale,0,0,previewScale,0,0);
 
     if(!logos.length){
       lastLayout = null;
@@ -651,6 +675,7 @@
 
   function renderLogoList(counts=[]){
     logoList.innerHTML = "";
+    logoList.classList.toggle("many-chips", logos.length > 1);
     logos.forEach((logo, i) => {
       const div = document.createElement("div");
       div.className = "chip";
@@ -887,17 +912,41 @@
   }
 
 
+  function renderToCanvas(targetCanvas, scale=1){
+    const targetCtx = targetCanvas.getContext("2d");
+    targetCtx.setTransform(1,0,0,1,0,0);
+    targetCtx.clearRect(0,0,targetCanvas.width,targetCanvas.height);
+    targetCtx.setTransform(scale,0,0,scale,0,0);
+    const layout = lastLayout || computeLayout();
+    for(const it of layout.items){
+      const logo = logos[it.logoIndex];
+      targetCtx.drawImage(logo.img, it.x, it.y, it.w, it.h);
+    }
+  }
+
   function exportPNG(){
     if(!logos.length){
       alert("Primero arrastrá uno o varios logos.");
       return;
     }
-    draw();
+    if(!lastLayout) lastLayout = computeLayout();
     const a = document.createElement("a");
     const fmt = currentFormat();
     const names = logos.map(l => l.name).slice(0,3).join("-");
     a.download = `${stamp()}__${currentModeSlug()}-${fmt.label.replaceAll(" ","").replaceAll(".","")}__${names || "logos"}__${logos.length}-logos.png`;
-    a.href = pngDataURLWithDPI(canvas.toDataURL("image/png"), 300);
+
+    try{
+      const out = document.createElement("canvas");
+      out.width = pagePxW;
+      out.height = pagePxH;
+      renderToCanvas(out, 1);
+      a.href = pngDataURLWithDPI(out.toDataURL("image/png"), 300);
+    }catch(err){
+      // Si el navegador no permite generar una imagen tan grande, al menos exporta la vista previa.
+      alert("Este formato es muy grande para exportar PNG desde este dispositivo. Te conviene usar SVG editable para 60×100 o 60×150, o exportar el PNG desde la Mac.");
+      draw();
+      return;
+    }
     a.click();
   }
 
@@ -962,7 +1011,7 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="${fmt.w}mm"
      height="${fmt.h}mm"
-     viewBox="0 0 ${canvas.width} ${canvas.height}">
+     viewBox="0 0 ${pagePxW} ${pagePxH}">
 <title>${escapeXml(currentModeLabel())} ${escapeXml(fmt.label)}</title>
 <desc>Plancha transparente ${escapeXml(currentModeLabel())} generada por 3DCD. Reimportable por esta herramienta.</desc>
 <metadata><![CDATA[
